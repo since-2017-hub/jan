@@ -9,14 +9,7 @@ pub struct DownloadManagerState {
     pub cancel_tokens: HashMap<String, CancellationToken>,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
-pub struct ProxyConfig {
-    pub url: String,
-    pub username: Option<String>,
-    pub password: Option<String>,
-    pub no_proxy: Option<Vec<String>>, // List of domains to bypass proxy
-    pub ignore_ssl: Option<bool>,      // Ignore SSL certificate verification
-}
+pub use jan_utils::network::ProxyConfig;
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct DownloadItem {

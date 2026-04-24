@@ -1,5 +1,6 @@
 use super::models::{DownloadEvent, DownloadItem, ProgressTracker, ProxyConfig};
 use crate::core::app::commands::get_jan_data_folder_path;
+use jan_utils::network::{create_proxy_from_config, should_bypass_proxy};
 use crate::core::filesystem::helpers::resolve_path_within_jan_data_folder;
 use crate::core::updater::hmac_client::SignedRequestHeaders;
 use crate::core::updater::session::get_session_id;
@@ -208,95 +209,6 @@ async fn validate_downloaded_file(
 
     log::info!("All validations passed for {}", item.url);
     Ok(())
-}
-
-pub fn validate_proxy_config(config: &ProxyConfig) -> Result<(), String> {
-    // Validate proxy URL format
-    if let Err(e) = Url::parse(&config.url) {
-        return Err(format!("Invalid proxy URL '{}': {e}", config.url));
-    }
-
-    // Check if proxy URL has valid scheme
-    let url = Url::parse(&config.url).unwrap(); // Safe to unwrap as we just validated it
-    match url.scheme() {
-        "http" | "https" | "socks4" | "socks5" => {}
-        scheme => return Err(format!("Unsupported proxy scheme: {scheme}")),
-    }
-
-    // Validate authentication credentials
-    if config.username.is_some() && config.password.is_none() {
-        return Err("Username provided without password".to_string());
-    }
-
-    if config.password.is_some() && config.username.is_none() {
-        return Err("Password provided without username".to_string());
-    }
-
-    // Validate no_proxy entries
-    if let Some(no_proxy) = &config.no_proxy {
-        for entry in no_proxy {
-            if entry.is_empty() {
-                return Err("Empty no_proxy entry".to_string());
-            }
-            // Basic validation for wildcard patterns
-            if entry.starts_with("*.") && entry.len() < 3 {
-                return Err(format!("Invalid wildcard pattern: {entry}"));
-            }
-        }
-    }
-
-    // SSL verification settings are all optional booleans, no validation needed
-
-    Ok(())
-}
-
-pub fn create_proxy_from_config(config: &ProxyConfig) -> Result<reqwest::Proxy, String> {
-    // Validate the configuration first
-    validate_proxy_config(config)?;
-
-    let mut proxy = reqwest::Proxy::all(&config.url).map_err(err_to_string)?;
-
-    // Add authentication if provided
-    if let (Some(username), Some(password)) = (&config.username, &config.password) {
-        proxy = proxy.basic_auth(username, password);
-    }
-
-    Ok(proxy)
-}
-
-pub fn should_bypass_proxy(url: &str, no_proxy: &[String]) -> bool {
-    if no_proxy.is_empty() {
-        return false;
-    }
-
-    // Parse the URL to get the host
-    let parsed_url = match Url::parse(url) {
-        Ok(u) => u,
-        Err(_) => return false,
-    };
-
-    let host = match parsed_url.host_str() {
-        Some(h) => h,
-        None => return false,
-    };
-
-    // Check if host matches any no_proxy entry
-    for entry in no_proxy {
-        if entry == "*" {
-            return true;
-        }
-
-        // Simple wildcard matching
-        if let Some(domain) = entry.strip_prefix("*.") {
-            if host.ends_with(domain) {
-                return true;
-            }
-        } else if host == entry {
-            return true;
-        }
-    }
-
-    false
 }
 
 pub fn _get_client_for_item(
